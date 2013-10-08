@@ -313,6 +313,7 @@ void egl_display_t::loseCurrent(egl_context_t * cur_c)
             display->loseCurrentImpl(cur_c);
         }
     }
+    setGLHooksThreadSpecific(&gHooksNoContext);
 }
 
 void egl_display_t::loseCurrentImpl(egl_context_t * cur_c)
