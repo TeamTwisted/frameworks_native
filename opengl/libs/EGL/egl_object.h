@@ -151,6 +151,16 @@ public:
     void onLooseCurrent();
     void onMakeCurrent(EGLSurface draw, EGLSurface read);
 
+#ifdef USE_EGL_CONTEXT_PROTECTION
+    gl_hooks_t* getHooks() const {return protect ? cnx->protectedHooks[version]
+                                                 : cnx->hooks[version];}
+    gl_hooks_t* getUnprotectedHooks() const {return cnx->hooks[version];}
+    bool protect;
+    bool block;
+#else
+    gl_hooks_t* getHooks() const {return cnx->hooks[version];}
+#endif
+
     EGLDisplay dpy;
     EGLContext context;
     EGLConfig config;

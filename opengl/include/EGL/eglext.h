@@ -576,6 +576,17 @@ typedef EGLBoolean (EGLAPIENTRYP PFNEGLPRESENTATIONTIMEANDROID) (EGLDisplay dpy,
 #endif
 #endif
 
+#define USE_EGL_CONTEXT_PROTECTION
+
+#ifdef USE_EGL_CONTEXT_PROTECTION
+#define EGL_CONTEXT_PROTECTION_SEC  0x5EC1
+EGLAPI EGLBoolean EGLAPIENTRY eglProtectContextSEC(EGLContext ctx, EGLBoolean b);
+EGLAPI EGLBoolean EGLAPIENTRY eglProtectCurrentContextSEC(EGLBoolean b);
+#else
+#define eglProtectContextSEC(ctx, b) (EGL_TRUE)
+#define eglProtectCurrentContextSEC(b) (EGL_TRUE)
+#endif
+
 #ifdef __cplusplus
 }
 #endif
