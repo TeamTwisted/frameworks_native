@@ -25,6 +25,7 @@
 
 #include <utils/String8.h>
 #include <ui/DisplayInfo.h>
+#include <android/native_window.h>
 
 namespace android {
 
@@ -53,21 +54,36 @@ static void fillSurfaceRGBA8(const sp<SurfaceControl>& sc,
 class ScreenCapture : public RefBase {
 public:
     static void captureScreen(sp<ScreenCapture>* sc) {
-        sp<IMemoryHeap> heap;
-        uint32_t w=0, h=0;
+        void const* base = NULL;
+        uint32_t w=0, h=0, s=0;
         PixelFormat fmt=0;
+        size_t size = 0;
+        void *buf = NULL;
+
+        ScreenshotClient screenshot;
         sp<ISurfaceComposer> sf(ComposerService::getComposerService());
         sp<IBinder> display(sf->getBuiltInDisplay(ISurfaceComposer::eDisplayIdMain));
-        ASSERT_EQ(NO_ERROR, sf->captureScreen(display, &heap, &w, &h, &fmt, 0, 0,
-                0, INT_MAX));
-        ASSERT_TRUE(heap != NULL);
+        if (display != NULL && screenshot.update(display) == NO_ERROR) {
+            base = screenshot.getPixels();
+            w = screenshot.getWidth();
+            h = screenshot.getHeight();
+            s = screenshot.getStride();
+            fmt = screenshot.getFormat();
+            size = screenshot.getSize();
+        }
+        ASSERT_TRUE(base != NULL);
         ASSERT_EQ(PIXEL_FORMAT_RGBA_8888, fmt);
-        *sc = new ScreenCapture(w, h, heap);
+        buf = malloc(size);
+
+        ASSERT_TRUE(buf != NULL);
+        memcpy(buf, base, size);
+
+        *sc = new ScreenCapture(w, h, s, (void const*)buf);
     }
 
     void checkPixel(uint32_t x, uint32_t y, uint8_t r, uint8_t g, uint8_t b) {
-        const uint8_t* img = reinterpret_cast<const uint8_t*>(mHeap->base());
-        const uint8_t* pixel = img + (4 * (y*mWidth + x));
+        const uint8_t* img = reinterpret_cast<const uint8_t*>(mHeap);
+        const uint8_t* pixel = img + (4 * (y*mStride + x));
         if (r != pixel[0] || g != pixel[1] || b != pixel[2]) {
             String8 err(String8::format("pixel @ (%3d, %3d): "
                     "expected [%3d, %3d, %3d], got [%3d, %3d, %3d]",
@@ -77,15 +93,21 @@ public:
     }
 
 private:
-    ScreenCapture(uint32_t w, uint32_t h, const sp<IMemoryHeap>& heap) :
+    ScreenCapture(uint32_t w, uint32_t h, uint32_t s, void const* heap) :
         mWidth(w),
         mHeight(h),
+        mStride(s),
         mHeap(heap)
     {}
 
+    ~ScreenCapture() {
+        free((void*)mHeap);
+    }
+
     const uint32_t mWidth;
     const uint32_t mHeight;
-    sp<IMemoryHeap> mHeap;
+    const uint32_t mStride;
+    void const*  mHeap;
 };
 
 class LayerUpdateTest : public ::testing::Test {

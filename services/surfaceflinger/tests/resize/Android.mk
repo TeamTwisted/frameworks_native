@@ -8,7 +8,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libcutils \
 	libutils \
     libui \
-    libgui
+    libgui \
+    libbinder
 
 LOCAL_MODULE:= test-resize
 
