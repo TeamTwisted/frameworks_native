@@ -13,6 +13,7 @@ LOCAL_SRC_FILES := \
     FrameTracker.cpp \
     Layer.cpp \
     LayerDim.cpp \
+    LayerBlur.cpp \
     MessageQueue.cpp \
     MonitoredProducer.cpp \
     SurfaceFlinger.cpp \
@@ -105,6 +106,12 @@ LOCAL_SHARED_LIBRARIES := \
     libui \
     libgui \
     libpowermanager
+
+ifeq ($(TARGET_HAVE_UI_BLUR),true)
+    LOCAL_C_INCLUDES += $(TARGET_OUT_HEADERS)/ui
+    LOCAL_SHARED_LIBRARIES += libuiblur
+    LOCAL_CFLAGS += -DUI_BLUR
+endif
 
 LOCAL_MODULE := libsurfaceflinger
 
