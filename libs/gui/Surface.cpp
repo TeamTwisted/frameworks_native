@@ -835,7 +835,36 @@ status_t Surface::lock(
 
         if (canCopyBack) {
             // copy the area that is invalid and not repainted this round
-            const Region copyback(mDirtyRegion.subtract(newDirtyRegion));
+            Region copyback;
+            int nRegionSum = 0;
+            int backBufferSlot(getSlotFromBufferLocked(backBuffer.get()));
+            {
+                Mutex::Autolock lock(mMutex);
+                for (int i=0 ; i<NUM_BUFFER_SLOTS ; i++) {
+                    if (mSlots[i].buffer != NULL && i != backBufferSlot)
+                    {
+                        Region::const_iterator head(mSlots[i].dirtyRegion.begin());
+                        Region::const_iterator tail(mSlots[i].dirtyRegion.end());
+                        while (head != tail) {
+                            const Rect& r(*head++);
+                            ssize_t h = r.height();
+                            if (h <= 0) continue;
+                            nRegionSum += (r.height() * r.width());
+                        }
+                    }
+                }
+            }
+            if (nRegionSum < backBuffer->width * backBuffer->height / 2)
+            {
+                Mutex::Autolock lock(mMutex);
+                for (int i=0 ; i<NUM_BUFFER_SLOTS ; i++) {
+                    if (mSlots[i].buffer != NULL && i != backBufferSlot)
+                        copyback.orSelf(mSlots[i].dirtyRegion);
+                }
+            }
+            else
+                copyback.orSelf(mDirtyRegion.subtract(newDirtyRegion));
+
             if (!copyback.isEmpty())
                 copyBlt(backBuffer, frontBuffer, copyback);
         } else {
