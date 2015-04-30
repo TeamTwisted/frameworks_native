@@ -265,6 +265,9 @@ int Surface::cancelBuffer(android_native_buffer_t* buffer,
     Mutex::Autolock lock(mMutex);
     int i = getSlotFromBufferLocked(buffer);
     if (i < 0) {
+        if (fenceFd >= 0) {
+            close(fenceFd);
+        }
         return i;
     }
     sp<Fence> fence(fenceFd >= 0 ? new Fence(fenceFd) : Fence::NO_FENCE);
@@ -307,6 +310,9 @@ int Surface::queueBuffer(android_native_buffer_t* buffer, int fenceFd) {
     }
     int i = getSlotFromBufferLocked(buffer);
     if (i < 0) {
+        if (fenceFd >= 0) {
+            close(fenceFd);
+        }
         return i;
     }
 
