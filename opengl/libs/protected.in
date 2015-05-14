@@ -1,0 +1,6 @@
+PROTECTED_GL_VOID(glDeleteBuffers, (GLsizei n, const GLuint *buffers), (n, buffers))
+PROTECTED_GL_VOID(glDeleteFramebuffers, (GLsizei n, const GLuint* framebuffers), (n, framebuffers))
+PROTECTED_GL_VOID(glDeleteProgram, (GLuint program), (program))
+PROTECTED_GL_VOID(glDeleteRenderbuffers, (GLsizei n, const GLuint* renderbuffers), (n, renderbuffers))
+PROTECTED_GL_VOID(glDeleteShader, (GLuint shader), (shader))
+PROTECTED_GL_VOID(glDeleteTextures, (GLsizei n, const GLuint *textures), (n, textures))

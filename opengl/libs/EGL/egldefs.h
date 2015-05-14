@@ -47,6 +47,9 @@ struct egl_connection_t {
     void*               libEgl;
     void*               libGles1;
     void*               libGles2;
+#ifdef USE_EGL_CONTEXT_PROTECTION
+    gl_hooks_t *        protectedHooks[2];
+#endif
 };
 
 // ----------------------------------------------------------------------------

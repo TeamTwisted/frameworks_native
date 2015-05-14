@@ -27,6 +27,7 @@ LOCAL_SRC_FILES:= 	       \
 	EGL/egl_object.cpp     \
 	EGL/egl.cpp 	       \
 	EGL/eglApi.cpp 	       \
+        EGL/protect.cpp        \
 	EGL/trace.cpp              \
 	EGL/getProcAddress.cpp.arm \
 	EGL/Loader.cpp 	       \
