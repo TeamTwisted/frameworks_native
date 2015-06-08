@@ -20,13 +20,23 @@
 #include <binder/ProcessState.h>
 #include <binder/IServiceManager.h>
 
-#include <binder/IMemory.h>
+#include <gui/SurfaceComposerClient.h>
 #include <gui/ISurfaceComposer.h>
 
 #include <SkImageEncoder.h>
 #include <SkBitmap.h>
 
 using namespace android;
+
+static SkBitmap::Config flinger2skia(PixelFormat f)
+{
+    switch (f) {
+        case PIXEL_FORMAT_RGB_565:
+            return SkBitmap::kRGB_565_Config;
+        default:
+            return SkBitmap::kARGB_8888_Config;
+    }
+}
 
 int main(int argc, char** argv)
 {
@@ -35,28 +45,32 @@ int main(int argc, char** argv)
         exit(0);
     }
 
+    void const* base = 0;
+    uint32_t w, s, h, f;
+    size_t size = 0;
+
+    ScreenshotClient screenshot;
     const String16 name("SurfaceFlinger");
     sp<ISurfaceComposer> composer;
     getService(name, &composer);
-
-    sp<IMemoryHeap> heap;
-    uint32_t w, h;
-    PixelFormat f;
     sp<IBinder> display(composer->getBuiltInDisplay(ISurfaceComposer::eDisplayIdMain));
-    status_t err = composer->captureScreen(display, &heap, &w, &h, &f, 0, 0);
-    if (err != NO_ERROR) {
-        fprintf(stderr, "screen capture failed: %s\n", strerror(-err));
-        exit(0);
+    if (display != NULL && screenshot.update(display) == NO_ERROR) {
+        base = screenshot.getPixels();
+        w = screenshot.getWidth();
+        h = screenshot.getHeight();
+        s = screenshot.getStride();
+        f = screenshot.getFormat();
+        size = screenshot.getSize();
     }
 
     printf("screen capture success: w=%u, h=%u, pixels=%p\n",
-            w, h, heap->getBase());
+            w, h, base);
 
     printf("saving file as PNG in %s ...\n", argv[1]);
 
     SkBitmap b;
-    b.setConfig(SkBitmap::kARGB_8888_Config, w, h);
-    b.setPixels(heap->getBase());
+    b.setConfig(flinger2skia(f), w, h, s*bytesPerPixel(f));
+    b.setPixels((void*)base);
     SkImageEncoder::EncodeFile(argv[1], b,
             SkImageEncoder::kPNG_Type, SkImageEncoder::kDefaultQuality);
 

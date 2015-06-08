@@ -96,8 +96,8 @@ void Surface::setSidebandStream(const sp<NativeHandle>& stream) {
 void Surface::allocateBuffers() {
     uint32_t reqWidth = mReqWidth ? mReqWidth : mUserWidth;
     uint32_t reqHeight = mReqHeight ? mReqHeight : mUserHeight;
-    mGraphicBufferProducer->allocateBuffers(mSwapIntervalZero, mReqWidth,
-            mReqHeight, mReqFormat, mReqUsage);
+    mGraphicBufferProducer->allocateBuffers(mSwapIntervalZero, reqWidth,
+            reqHeight, mReqFormat, mReqUsage);
 }
 
 int Surface::hook_setSwapInterval(ANativeWindow* window, int interval) {
@@ -265,6 +265,9 @@ int Surface::cancelBuffer(android_native_buffer_t* buffer,
     Mutex::Autolock lock(mMutex);
     int i = getSlotFromBufferLocked(buffer);
     if (i < 0) {
+        if (fenceFd >= 0) {
+            close(fenceFd);
+        }
         return i;
     }
     sp<Fence> fence(fenceFd >= 0 ? new Fence(fenceFd) : Fence::NO_FENCE);
@@ -274,7 +277,6 @@ int Surface::cancelBuffer(android_native_buffer_t* buffer,
 
 int Surface::getSlotFromBufferLocked(
         android_native_buffer_t* buffer) const {
-    bool dumpedState = false;
     for (int i = 0; i < NUM_BUFFER_SLOTS; i++) {
         if (mSlots[i].buffer != NULL &&
                 mSlots[i].buffer->handle == buffer->handle) {
@@ -297,6 +299,7 @@ int Surface::queueBuffer(android_native_buffer_t* buffer, int fenceFd) {
     Mutex::Autolock lock(mMutex);
     int64_t timestamp;
     bool isAutoTimestamp = false;
+    sp<Fence> fence(fenceFd >= 0 ? new Fence(fenceFd) : Fence::NO_FENCE);
     if (mTimestamp == NATIVE_WINDOW_TIMESTAMP_AUTO) {
         timestamp = systemTime(SYSTEM_TIME_MONOTONIC);
         isAutoTimestamp = true;
@@ -307,6 +310,9 @@ int Surface::queueBuffer(android_native_buffer_t* buffer, int fenceFd) {
     }
     int i = getSlotFromBufferLocked(buffer);
     if (i < 0) {
+        if (fenceFd >= 0) {
+            close(fenceFd);
+        }
         return i;
     }
 
@@ -315,7 +321,6 @@ int Surface::queueBuffer(android_native_buffer_t* buffer, int fenceFd) {
     Rect crop;
     mCrop.intersect(Rect(buffer->width, buffer->height), &crop);
 
-    sp<Fence> fence(fenceFd >= 0 ? new Fence(fenceFd) : Fence::NO_FENCE);
     IGraphicBufferProducer::QueueBufferOutput output;
     IGraphicBufferProducer::QueueBufferInput input(timestamp, isAutoTimestamp,
             crop, mScalingMode, mTransform ^ mStickyTransform, mSwapIntervalZero,
@@ -835,7 +840,36 @@ status_t Surface::lock(
 
         if (canCopyBack) {
             // copy the area that is invalid and not repainted this round
-            const Region copyback(mDirtyRegion.subtract(newDirtyRegion));
+            Region copyback;
+            int nRegionSum = 0;
+            int backBufferSlot(getSlotFromBufferLocked(backBuffer.get()));
+            {
+                Mutex::Autolock lock(mMutex);
+                for (int i=0 ; i<NUM_BUFFER_SLOTS ; i++) {
+                    if (mSlots[i].buffer != NULL && i != backBufferSlot)
+                    {
+                        Region::const_iterator head(mSlots[i].dirtyRegion.begin());
+                        Region::const_iterator tail(mSlots[i].dirtyRegion.end());
+                        while (head != tail) {
+                            const Rect& r(*head++);
+                            ssize_t h = r.height();
+                            if (h <= 0) continue;
+                            nRegionSum += (r.height() * r.width());
+                        }
+                    }
+                }
+            }
+            if (nRegionSum < backBuffer->width * backBuffer->height / 2)
+            {
+                Mutex::Autolock lock(mMutex);
+                for (int i=0 ; i<NUM_BUFFER_SLOTS ; i++) {
+                    if (mSlots[i].buffer != NULL && i != backBufferSlot)
+                        copyback.orSelf(mSlots[i].dirtyRegion);
+                }
+            }
+            else
+                copyback.orSelf(mDirtyRegion.subtract(newDirtyRegion));
+
             if (!copyback.isEmpty())
                 copyBlt(backBuffer, frontBuffer, copyback);
         } else {

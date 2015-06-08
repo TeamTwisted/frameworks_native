@@ -47,6 +47,10 @@
 #include "egl_tls.h"
 #include "egldefs.h"
 
+#ifdef USE_EGL_CONTEXT_PROTECTION
+#include "protect.h"
+#endif
+
 using namespace android;
 
 // This extension has not been ratified yet, so can't be shipped.
@@ -80,6 +84,9 @@ struct extention_map_t {
 extern char const * const gBuiltinExtensionString =
         "EGL_KHR_get_all_proc_addresses "
         "EGL_ANDROID_presentation_time "
+#ifdef USE_EGL_CONTEXT_PROTECTION
+        "EGL_SEC_context_protection "
+#endif
         ;
 extern char const * const gExtensionString  =
         "EGL_KHR_image "                        // mandatory
@@ -631,8 +638,46 @@ EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig config,
             egl_context_t* const c = get_context(share_list);
             share_list = c->context;
         }
+
+#ifdef USE_EGL_CONTEXT_PROTECTION
+        const EGLint* pAttribs = attrib_list;
+        EGLint* attribs = NULL;
+        bool protect = false;
+        if (attrib_list) {
+            const EGLint* s = attrib_list;
+            bool copy = false;
+            int l = 0;
+            while (*s != EGL_NONE)  {
+                if (*s++ != EGL_CONTEXT_PROTECTION_SEC) {
+                    l += 2;
+                } else {
+                    protect = *s;
+                    copy = true;
+                }
+                s++;
+            }
+            if (copy) {
+                EGLint* d = attribs = new EGLint[l + 1];
+                s = attrib_list;
+                while (*s != EGL_NONE)  {
+                    if (*s != EGL_CONTEXT_PROTECTION_SEC) {
+                        *d++ = s[0];
+                        *d++ = s[1];
+                    }
+                    s += 2;
+                }
+                *d = EGL_NONE;
+                pAttribs = attribs;
+            }
+        }
+        EGLContext context = cnx->egl.eglCreateContext(
+                dp->disp.dpy, config, share_list, pAttribs);
+        if (attribs)
+            delete[] attribs;
+#else
         EGLContext context = cnx->egl.eglCreateContext(
                 dp->disp.dpy, config, share_list, attrib_list);
+#endif
         if (context != EGL_NO_CONTEXT) {
             // figure out if it's a GLESv1 or GLESv2
             int version = 0;
@@ -651,6 +696,15 @@ EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig config,
             }
             egl_context_t* c = new egl_context_t(dpy, context, config, cnx,
                     version);
+
+#ifdef USE_EGL_CONTEXT_PROTECTION
+            char value[PROPERTY_VALUE_MAX];
+            property_get(PROPERTY_PROTECT_BLOCK, value, "0");
+            c->block = atoi(value) != 0;
+            if (protect) {
+                eglProtectContextSEC(c, EGL_TRUE);
+            }
+#endif
 #if EGL_TRACE
             if (getEGLDebugLevel() > 0)
                 GLTrace_eglCreateContext(version, c);
@@ -758,7 +812,7 @@ EGLBoolean eglMakeCurrent(  EGLDisplay dpy, EGLSurface draw,
 
     if (result == EGL_TRUE) {
         if (c) {
-            setGLHooksThreadSpecific(c->cnx->hooks[c->version]);
+            setGLHooksThreadSpecific(c->getHooks());
             egl_tls_t::setContext(ctx);
 #if EGL_TRACE
             if (getEGLDebugLevel() > 0)
@@ -1067,8 +1121,8 @@ EGLBoolean eglSwapBuffers(EGLDisplay dpy, EGLSurface draw)
                 EGLContext ctx = egl_tls_t::getContext();
                 egl_context_t * const c = get_context(ctx);
                 if (c) {
-                    setGLHooksThreadSpecific(c->cnx->hooks[c->version]);
-                    GLTrace_eglMakeCurrent(c->version, c->cnx->hooks[c->version], ctx);
+                    setGLHooksThreadSpecific(c->getHooks());
+                    GLTrace_eglMakeCurrent(c->version, c->getHooks(), ctx);
                 }
             }
         }
@@ -1078,7 +1132,7 @@ EGLBoolean eglSwapBuffers(EGLDisplay dpy, EGLSurface draw)
         // tracing is now disabled, so switch back to the non trace version
         EGLContext ctx = egl_tls_t::getContext();
         egl_context_t * const c = get_context(ctx);
-        if (c) setGLHooksThreadSpecific(c->cnx->hooks[c->version]);
+        if (c) setGLHooksThreadSpecific(c->getHooks());
         GLTrace_stop();
     }
 #endif
@@ -1591,3 +1645,29 @@ EGLuint64NV eglGetSystemTimeNV()
 
     return setErrorQuiet(EGL_BAD_DISPLAY, 0);
 }
+
+#ifdef USE_EGL_CONTEXT_PROTECTION
+EGLBoolean eglProtectContextSEC(EGLContext ctx, EGLBoolean b)
+{
+    clearError();
+
+#if EGL_TRACE
+//    if (getEGLDebugLevel() > 0)
+//TODO: implement:
+//          GLTrace_eglProtectContextSEC(ctx, b);
+#endif
+
+    egl_context_t* c = get_context(ctx);
+    if (!egl_context_set_protect(c, b)) {
+        //could set the EGL_BAD_CONTEXT EGL error as well:
+        //return setError(EGL_BAD_CONTEXT, EGL_FALSE);
+        return EGL_FALSE;
+    }
+    setGLHooksThreadSpecific(c->getHooks());
+    return EGL_TRUE;
+}
+
+EGLBoolean eglProtectCurrentContextSEC(EGLBoolean b) {
+    return eglProtectContextSEC(eglGetCurrentContext(), b);
+}
+#endif

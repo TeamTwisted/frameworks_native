@@ -43,6 +43,10 @@
 
 typedef __eglMustCastToProperFunctionPointerType EGLFuncPointer;
 
+#ifdef USE_EGL_CONTEXT_PROTECTION
+#include "protect.h"
+#endif
+
 // ----------------------------------------------------------------------------
 namespace android {
 // ----------------------------------------------------------------------------
@@ -315,6 +319,10 @@ static EGLBoolean egl_init_drivers_locked() {
         cnx->hooks[egl_connection_t::GLESv2_INDEX] =
                 &gHooks[egl_connection_t::GLESv2_INDEX];
         cnx->dso = loader.open(cnx);
+
+#ifdef USE_EGL_CONTEXT_PROTECTION
+        egl_init_context_protection(cnx);
+#endif
     }
 
     return cnx->dso ? EGL_TRUE : EGL_FALSE;

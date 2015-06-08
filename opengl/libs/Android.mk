@@ -27,6 +27,7 @@ LOCAL_SRC_FILES:= 	       \
 	EGL/egl_object.cpp     \
 	EGL/egl.cpp 	       \
 	EGL/eglApi.cpp 	       \
+        EGL/protect.cpp        \
 	EGL/trace.cpp              \
 	EGL/getProcAddress.cpp.arm \
 	EGL/Loader.cpp 	       \
@@ -48,6 +49,9 @@ ifeq ($(BOARD_ALLOW_EGL_HIBERNATION),true)
   LOCAL_CFLAGS += -DBOARD_ALLOW_EGL_HIBERNATION
 endif
 ifeq ($(TARGET_BOARD_PLATFORM), omap4)
+  LOCAL_CFLAGS += -DWORKAROUND_BUG_10194508=1
+endif
+ifeq ($(BOARD_EGL_WORKAROUND_BUG_10194508),true)
   LOCAL_CFLAGS += -DWORKAROUND_BUG_10194508=1
 endif
 ifneq ($(MAX_EGL_CACHE_ENTRY_SIZE),)

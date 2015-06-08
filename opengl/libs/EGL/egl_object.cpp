@@ -88,6 +88,10 @@ egl_context_t::egl_context_t(EGLDisplay dpy, EGLContext context, EGLConfig confi
         egl_connection_t const* cnx, int version) :
     egl_object_t(get_display_nowake(dpy)), dpy(dpy), context(context),
             config(config), read(0), draw(0), cnx(cnx), version(version) {
+#ifdef USE_EGL_CONTEXT_PROTECTION
+    protect = false;
+    block = false;
+#endif
 }
 
 void egl_context_t::onLooseCurrent() {
