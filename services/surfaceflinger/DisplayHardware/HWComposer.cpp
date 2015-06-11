@@ -632,6 +632,7 @@ status_t HWComposer::setFramebufferTarget(int32_t id,
 }
 
 status_t HWComposer::prepare() {
+    Mutex::Autolock _l(mDisplayLock);
     for (size_t i=0 ; i<mNumDisplays ; i++) {
         DisplayData& disp(mDisplayData[i]);
         if (disp.framebufferTarget) {
@@ -1117,6 +1118,7 @@ static String8 getFormatStr(PixelFormat format) {
 }
 
 void HWComposer::dump(String8& result) const {
+    Mutex::Autolock _l(mDisplayLock);
     if (mHwc) {
         result.appendFormat("Hardware Composer state (version %08x):\n", hwcApiVersion(mHwc));
         result.appendFormat("  mDebugForceFakeVSync=%d\n", mDebugForceFakeVSync);
