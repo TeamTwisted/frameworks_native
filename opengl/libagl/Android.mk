@@ -31,6 +31,10 @@ LOCAL_SHARED_LIBRARIES := libcutils libhardware libutils liblog libpixelflinger 
 LOCAL_SRC_FILES_arm += fixed_asm.S iterators.S
 LOCAL_CFLAGS_arm += -fstrict-aliasing
 
+ifeq ($(ARCH_ARM_HAVE_VFP),true)
+	LOCAL_CFLAGS_arm += -DHAVE_ARM_VFP
+endif
+
 LOCAL_SRC_FILES_mips += arch-mips/fixed_asm.S
 LOCAL_CFLAGS_mips += -fstrict-aliasing
 # The graphics code can generate division by zero
