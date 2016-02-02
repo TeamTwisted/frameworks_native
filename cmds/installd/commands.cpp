@@ -1285,28 +1285,48 @@ int mark_boot_complete(const char* instruction_set)
   return 0;
 }
 
-void mkinnerdirs(char* path, int basepos, mode_t mode, int uid, int gid,
-        struct stat* statbuf)
+void mkinnerdirs(char* srcpath, char* dstpath, int srcbasepos, int dstbasepos, mode_t mode,
+        int uid, int gid, struct stat* statbuf)
 {
-    while (path[basepos] != 0) {
-        if (path[basepos] == '/') {
-            path[basepos] = 0;
-            if (lstat(path, statbuf) < 0) {
-                ALOGV("Making directory: %s\n", path);
-                if (mkdir(path, mode) == 0) {
-                    chown(path, uid, gid);
+    struct stat src_statbuf;
+    while (dstpath[dstbasepos] != 0) {
+        if (dstpath[dstbasepos] == '/') {
+            dstpath[dstbasepos] = srcpath[srcbasepos] = 0;
+            if (lstat(dstpath, statbuf) < 0) {
+                if (selinux_android_restorecon(srcpath, 0)) {
+                    ALOGE("cannot restorecon dir '%s': %s\n", srcpath, strerror(errno));
+                }
+                ALOGV("Making directory: %s\n", dstpath);
+                if (mkdir(dstpath, mode) == 0) {
+                    char* srccon;
+                    int rc;
+                    chown(dstpath, uid, gid);
+                    if (stat(srcpath, &src_statbuf) == 0) {
+                        chmod(dstpath, src_statbuf.st_mode & (S_IRWXU|S_IRWXG|S_IRWXO));
+                    }
+                    rc = getfilecon(srcpath, &srccon);
+                    if (rc >= 0) {
+                        if (setfilecon(dstpath, srccon) < 0) {
+                            ALOGE("Unable to set file context for %s", dstpath);
+                        }
+                        freecon(srccon);
+                    } else {
+                        ALOGW("Unknown file context for %s", srcpath);
+                    }
                 } else {
-                    ALOGW("Unable to make directory %s: %s\n", path, strerror(errno));
+                    ALOGW("Unable to make directory %s: %s\n", dstpath, strerror(errno));
                 }
             }
-            path[basepos] = '/';
-            basepos++;
+            dstpath[dstbasepos] = srcpath[srcbasepos] = '/';
+            dstbasepos++;
+            srcbasepos++;
         }
-        basepos++;
+        dstbasepos++;
+        srcbasepos++;
     }
 }
 
-int movefileordir(char* srcpath, char* dstpath, int dstbasepos,
+int movefileordir(char* srcpath, char* dstpath, int srcbasepos, int dstbasepos,
         int dstuid, int dstgid, struct stat* statbuf)
 {
     DIR *d;
@@ -1322,8 +1342,11 @@ int movefileordir(char* srcpath, char* dstpath, int dstbasepos,
     }
 
     if ((statbuf->st_mode&S_IFDIR) == 0) {
-        mkinnerdirs(dstpath, dstbasepos, S_IRWXU|S_IRWXG|S_IXOTH,
+        mkinnerdirs(srcpath, dstpath, srcbasepos, dstbasepos, S_IRWXU|S_IRWXG|S_IXOTH,
                 dstuid, dstgid, statbuf);
+        if (selinux_android_restorecon(srcpath, 0)) {
+            ALOGE("cannot restorecon file '%s': %s\n", srcpath, strerror(errno));
+        }
         ALOGV("Renaming %s to %s (uid %d)\n", srcpath, dstpath, dstuid);
         if (rename(srcpath, dstpath) >= 0) {
             if (chown(dstpath, dstuid, dstgid) < 0) {
@@ -1369,7 +1392,7 @@ int movefileordir(char* srcpath, char* dstpath, int dstbasepos,
         strcpy(srcpath+srcend+1, name);
         strcpy(dstpath+dstend+1, name);
 
-        if (movefileordir(srcpath, dstpath, dstbasepos, dstuid, dstgid, statbuf) != 0) {
+        if (movefileordir(srcpath, dstpath, srcbasepos, dstbasepos, dstuid, dstgid, statbuf) != 0) {
             res = 1;
         }
 
@@ -1452,6 +1475,7 @@ int movefiles()
                             if (!create_move_path(srcpath, srcpkg, buf+bufp, 0) &&
                                     !create_move_path(dstpath, dstpkg, buf+bufp, 0)) {
                                 movefileordir(srcpath, dstpath,
+                                        strlen(srcpath)-strlen(buf+bufp),
                                         strlen(dstpath)-strlen(buf+bufp),
                                         dstuid, dstgid, &s);
                             }
